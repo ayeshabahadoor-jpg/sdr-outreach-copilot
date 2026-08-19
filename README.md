@@ -82,6 +82,20 @@ placeholder — replace it before sending.
 
 Sequences print to the terminal and save to `./output/<name>_<company>.md`.
 
+### Personalization score
+
+Each prospect gets a **0–100 personalization score** (with a Strong/Good/Weak
+rating) so you can spot weak drafts at a glance — especially useful in `--ai`
+mode. It rewards every one of the four touches for three things:
+
+- referencing the **intent signal** (35 pts)
+- tying to the **role-specific pain** (35 pts)
+- including a real **proof point** (30 pts)
+
+The breakdown (e.g. `intent 4/4, pain 4/4, proof 4/4`) shows exactly which
+element a weak touch is missing. The score prints in the terminal, in the
+summary table, and in each Markdown file's metadata.
+
 ## How personalization works (offline engine)
 
 - **Role → pain** mapping: e.g. Support/CX lead → *ticket volume outpacing
