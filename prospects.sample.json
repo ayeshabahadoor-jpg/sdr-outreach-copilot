@@ -1,0 +1,18 @@
+{
+  "prospects": [
+    {
+      "name": "Priya Nair",
+      "company": "Fable Health",
+      "role": "Director of Customer Experience",
+      "industry": "Digital Health",
+      "intent_signal": "attended our AI-first support webinar",
+      "product_focus": "Helpdesk"
+    },
+    {
+      "name": "Tom Becker",
+      "company": "Cobalt Studios",
+      "role": "Founder & CEO",
+      "intent_signal": "starred our GitHub repo and viewed pricing twice"
+    }
+  ]
+}
