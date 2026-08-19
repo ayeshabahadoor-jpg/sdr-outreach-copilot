@@ -70,7 +70,8 @@ See [`prospects.sample.json`](prospects.sample.json).
 
 For every prospect the tool produces a 4-touch sequence:
 
-1. **Cold email** — subject line + body (< 90 words)
+1. **Cold email** — **2 A/B subject-line variants** (each naming the company
+   and the role's specific pain) + body (< 90 words)
 2. **LinkedIn connection note** — < 300 characters
 3. **Follow-up "bump"** — < 70 words
 4. **Cold-call opener** — 3–4 conversational sentences

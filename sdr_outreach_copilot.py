@@ -73,6 +73,7 @@ ROLE_PAIN_RULES: List[Dict[str, Any]] = [
         "label": "Founder/CEO",
         "peer": "founders",
         "pain": "scaling support without scaling headcount",
+        "pain_short": "scaling support without more headcount",
         "default_proof": "fin_resolution",
     },
     {
@@ -81,6 +82,7 @@ ROLE_PAIN_RULES: List[Dict[str, Any]] = [
         "label": "Support/CX lead",
         "peer": "support and CX leaders",
         "pain": "ticket volume outpacing your headcount",
+        "pain_short": "ticket volume vs. headcount",
         "default_proof": "fin_resolution",
     },
     {
@@ -88,6 +90,7 @@ ROLE_PAIN_RULES: List[Dict[str, Any]] = [
         "label": "Ops",
         "peer": "ops leaders",
         "pain": "repetitive manual work eating your team's time",
+        "pain_short": "repetitive manual support work",
         "default_proof": "copilot_efficiency",
     },
     {
@@ -95,6 +98,7 @@ ROLE_PAIN_RULES: List[Dict[str, Any]] = [
         "label": "VP/Director/Head",
         "peer": "leaders in your seat",
         "pain": "hitting efficiency targets without hurting CSAT",
+        "pain_short": "efficiency targets without hurting CSAT",
         "default_proof": "copilot_efficiency",
     },
     {
@@ -102,12 +106,14 @@ ROLE_PAIN_RULES: List[Dict[str, Any]] = [
         "label": "Marketing/Revenue",
         "peer": "revenue leaders",
         "pain": "converting inbound interest before it goes cold",
+        "pain_short": "inbound leads going cold",
         "default_proof": "fin_lead_qualification",
     },
 ]
 
 #: Fallback pain when a role doesn't match any rule above.
 DEFAULT_PAIN = "doing more with the team you already have"
+DEFAULT_PAIN_SHORT = "doing more with the same team"
 DEFAULT_PEER = "teams like yours"
 DEFAULT_PROOF_KEY = "fin_resolution"
 
@@ -139,6 +145,7 @@ class Prospect:
 
     #: Populated during resolution; not user-supplied.
     pain: str = field(default="", init=False)
+    pain_short: str = field(default="", init=False)
     role_label: str = field(default="", init=False)
     peer: str = field(default="", init=False)
     proof_key: str = field(default="", init=False)
@@ -185,11 +192,13 @@ class Prospect:
             self.role_label = matched["label"]
             self.peer = matched["peer"]
             self.pain = matched["pain"]
+            self.pain_short = matched["pain_short"]
             self.proof_key = matched["default_proof"]
         else:
             self.role_label = self.role.title()
             self.peer = DEFAULT_PEER
             self.pain = DEFAULT_PAIN
+            self.pain_short = DEFAULT_PAIN_SHORT
             self.proof_key = DEFAULT_PROOF_KEY
 
         # Product focus, when explicit, overrides the role-derived proof choice.
@@ -216,7 +225,7 @@ class Prospect:
 class OutreachSequence:
     """A complete 4-touch outreach sequence for one prospect."""
 
-    email_subject: str
+    email_subjects: List[str]  # two variants for A/B testing
     email_body: str
     linkedin_note: str
     follow_up: str
@@ -247,7 +256,10 @@ class OutreachSequence:
             "",
             "## 1. Cold email",
             "",
-            f"**Subject:** {self.email_subject}",
+            "**Subject line A/B variants:**",
+            "",
+            f"- **A:** {self.email_subjects[0]}",
+            f"- **B:** {self.email_subjects[1]}",
             "",
             self.email_body,
             "",
@@ -301,7 +313,13 @@ def generate_offline(prospect: Prospect) -> OutreachSequence:
     signal = prospect.intent_signal
 
     # --- 1. Cold email ------------------------------------------------------
-    email_subject = f"{company} + Fin: {signal.rstrip('.')}"
+    # Two subject variants for A/B testing. Both name the company and the
+    # role's specific pain, in two different styles (question vs. statement).
+    pain_short = prospect.pain_short
+    email_subjects = [
+        f"{company}: {pain_short}?",
+        f"{pain_short[0].upper() + pain_short[1:]} at {company}",
+    ]
     email_body = _clamp_words(
         textwrap.fill(
             f"Hi {fn}, I saw you {signal}. As {role} at {company}, you're "
@@ -354,7 +372,7 @@ def generate_offline(prospect: Prospect) -> OutreachSequence:
     )
 
     return OutreachSequence(
-        email_subject=email_subject,
+        email_subjects=email_subjects,
         email_body=email_body,
         linkedin_note=linkedin_note,
         follow_up=follow_up,
@@ -403,6 +421,12 @@ def build_llm_prompt(prospect: Prospect) -> str:
         - Use the literal token {SENDER_PLACEHOLDER} as the sender's name.
         - No made-up statistics. No emojis. Plain, confident language.
 
+        SUBJECT LINES
+        Provide TWO distinct subject-line variants for A/B testing. EACH must
+        name the company ("{prospect.company}") AND the role's specific pain
+        ("{prospect.pain_short}"). Make the two genuinely different in angle
+        (e.g. one a question, one a statement). Keep each under ~60 characters.
+
         LENGTH CONSTRAINTS
         - cold_email_body: fewer than 90 words.
         - linkedin_note: fewer than 300 characters.
@@ -412,7 +436,7 @@ def build_llm_prompt(prospect: Prospect) -> str:
         OUTPUT FORMAT
         Return ONLY valid minified JSON, no markdown fences, matching exactly:
         {{
-          "email_subject": "string",
+          "email_subjects": ["variant A string", "variant B string"],
           "email_body": "string",
           "linkedin_note": "string",
           "follow_up": "string",
@@ -460,14 +484,18 @@ def generate_ai(prospect: Prospect) -> OutreachSequence:
         raise ValueError(f"could not find JSON in model response: {raw[:200]!r}")
     data = json.loads(match.group(0))
 
-    required = {"email_subject", "email_body", "linkedin_note", "follow_up",
+    required = {"email_subjects", "email_body", "linkedin_note", "follow_up",
                 "call_opener"}
     missing = required - data.keys()
     if missing:
         raise ValueError(f"model response missing fields: {sorted(missing)}")
 
+    subjects = [str(s).strip() for s in data["email_subjects"] if str(s).strip()]
+    if len(subjects) < 2:
+        raise ValueError("model returned fewer than 2 subject-line variants")
+
     return OutreachSequence(
-        email_subject=str(data["email_subject"]).strip(),
+        email_subjects=subjects[:2],
         email_body=str(data["email_body"]).strip(),
         linkedin_note=str(data["linkedin_note"]).strip(),
         follow_up=str(data["follow_up"]).strip(),
@@ -578,7 +606,9 @@ def print_sequence(prospect: Prospect, sequence: OutreachSequence) -> None:
     print(rule)
 
     print("\n--- 1. COLD EMAIL ---")
-    print(f"Subject: {sequence.email_subject}\n")
+    print("Subject A/B variants:")
+    print(f"  A: {sequence.email_subjects[0]}")
+    print(f"  B: {sequence.email_subjects[1]}\n")
     print(sequence.email_body)
 
     print("\n--- 2. LINKEDIN NOTE ---")
